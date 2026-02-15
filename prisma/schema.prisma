@@ -1,0 +1,661 @@
+// Multi-Tenant SaaS Attendance System Schema
+// =============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// PLATFORM & TENANT MANAGEMENT
+// ============================================
+
+model PlatformAdmin {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  role      String   @default("platform_admin") // platform_owner, platform_admin, platform_support
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Tenant {
+  id              String           @id @default(cuid())
+  name            String
+  slug            String           @unique
+  logo            String?
+  timezone        String           @default("UTC")
+  currency        String           @default("USD")
+  isActive        Boolean          @default(true)
+  planId          String?
+  plan            SubscriptionPlan? @relation(fields: [planId], references: [id])
+  subscriptionStatus String        @default("trial") // trial, active, past_due, cancelled
+  trialEndsAt     DateTime?
+  subscriptionEndsAt DateTime?
+  employeeLimit   Int              @default(10)
+  branchLimit     Int              @default(1)
+  storageLimit    Int              @default(100) // MB
+  features        String?          // JSON string for feature flags
+  settings        String?          // JSON string for tenant settings
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  branches        Branch[]
+  employees       Employee[]
+  schedules       Schedule[]
+  attendanceRules AttendanceRule[]
+  payrollRules    PayrollRule[]
+  holidays        Holiday[]
+  departments     Department[]
+  subscriptions   BillingHistory[]
+  faceProfiles    FaceProfile[]
+  offlineDevices  OfflineDevice[]
+}
+
+model SubscriptionPlan {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  description   String?
+  priceMonthly  Float
+  priceYearly   Float?
+  employeeLimit Int      @default(10)
+  branchLimit   Int      @default(1)
+  storageLimit  Int      @default(100)
+  features      String?  // JSON
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  tenants       Tenant[]
+}
+
+model BillingHistory {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  amount          Float
+  currency        String   @default("USD")
+  status          String   @default("pending") // pending, paid, failed, refunded
+  paymentMethod   String?
+  transactionId   String?
+  invoiceUrl      String?
+  periodStart     DateTime
+  periodEnd       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id              String       @id @default(cuid())
+  email           String       @unique
+  passwordHash    String
+  name            String
+  phone           String?
+  avatar          String?
+  isActive        Boolean      @default(true)
+  emailVerified   DateTime?
+  lastLoginAt     DateTime?
+  lastLoginIp     String?
+  failedAttempts  Int          @default(0)
+  lockedUntil     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  
+  platformAdmin   PlatformAdmin?
+  employee        Employee?
+  sessions        Session[]
+  auditLogs       AuditLog[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  token        String   @unique
+  refreshToken String   @unique
+  deviceInfo   String?
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ============================================
+// RBAC (Role-Based Access Control)
+// ============================================
+
+model Role {
+  id          String         @id @default(cuid())
+  tenantId    String?
+  name        String         // platform_owner, company_admin, branch_admin, hr_manager, employee
+  displayName String
+  description String?
+  isSystem    Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  
+  userRoles   UserRole[]
+  rolePerms   RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  module      String           // employees, attendance, reports, settings, payroll
+  action      String           // create, read, update, delete, export, approve
+  resource    String           // all, own, branch, department
+  description String?
+  createdAt   DateTime         @default(now())
+  
+  rolePerms   RolePermission[]
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, roleId])
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id])
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  createdAt    DateTime   @default(now())
+  
+  @@unique([roleId, permissionId])
+}
+
+// ============================================
+// ORGANIZATION STRUCTURE
+// ============================================
+
+model Department {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name        String
+  description String?
+  managerId   String?  // Employee ID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  employees   Employee[]
+  
+  @@unique([tenantId, name])
+}
+
+model Branch {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  name         String
+  code         String?
+  address      String?
+  city         String?
+  country      String?
+  latitude     Float?
+  longitude    Float?
+  geofenceRadius Int?   @default(100) // meters
+  isGeofenceEnabled Boolean @default(true)
+  wifiSsid     String?  // For WiFi validation
+  ipRange      String?  // For IP validation
+  isActive     Boolean  @default(true)
+  workingStart String?  @default("09:00")
+  workingEnd   String?  @default("18:00")
+  timezone     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  employees    Employee[]
+  schedules    Schedule[]
+  
+  @@unique([tenantId, name])
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name        String
+  date        DateTime
+  isRecurring Boolean  @default(false)
+  type        String   @default("public") // public, optional, company
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([tenantId, date])
+}
+
+// ============================================
+// EMPLOYEE MANAGEMENT
+// ============================================
+
+model Employee {
+  id              String       @id @default(cuid())
+  tenantId        String
+  tenant          Tenant       @relation(fields: [tenantId], references: [id])
+  userId          String?      @unique
+  user            User?        @relation(fields: [userId], references: [id])
+  employeeCode    String
+  firstName       String
+  lastName        String
+  email           String
+  phone           String?
+  avatar          String?
+  departmentId    String?
+  department      Department?  @relation(fields: [departmentId], references: [id])
+  branchId        String
+  branch          Branch       @relation(fields: [branchId], references: [id])
+  position        String?
+  hireDate        DateTime?
+  terminationDate DateTime?
+  employmentType  String       @default("full_time") // full_time, part_time, contract
+  salaryType      String       @default("monthly") // hourly, monthly
+  salaryAmount    Float?
+  currency        String       @default("USD")
+  workingHoursPerWeek Int      @default(40)
+  status          String       @default("active") // active, inactive, terminated
+  allowedDevices  String?      // JSON array of device IDs
+  offlineEnabled  Boolean      @default(true)
+  maxOfflineRecords Int        @default(50)
+  faceAuthEnabled Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  
+  attendances     Attendance[]
+  scheduleAssignments ScheduleAssignment[]
+  faceProfiles    FaceProfile[]
+  offlineDevices  OfflineDevice[]
+  salaryProfiles  SalaryProfile[]
+  
+  @@unique([tenantId, employeeCode])
+  @@unique([tenantId, email])
+}
+
+model FaceProfile {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id])
+  embedding    String   // Encrypted face embedding
+  imageUrl     String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([employeeId])
+}
+
+model OfflineDevice {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  employeeId   String?
+  employee     Employee? @relation(fields: [employeeId], references: [id])
+  deviceId     String
+  deviceName   String?
+  deviceType   String?  // mobile, tablet, desktop
+  osVersion    String?
+  appVersion   String?
+  lastSyncAt   DateTime?
+  offlineRecordCount Int @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([tenantId, deviceId])
+}
+
+// ============================================
+// SCHEDULES & SHIFTS
+// ============================================
+
+model Schedule {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  branchId     String?
+  branch       Branch?  @relation(fields: [branchId], references: [id])
+  name         String
+  type         String   @default("fixed") // fixed, flexible, rotating
+  startTime    String   @default("09:00")
+  endTime      String   @default("18:00")
+  breakStart   String?  @default("13:00")
+  breakEnd     String?  @default("14:00")
+  breakDuration Int?    @default(60) // minutes
+  graceMinutes Int      @default(15)
+  workingDays  String   @default("1,2,3,4,5") // 0=Sunday, 1=Monday, etc.
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  assignments  ScheduleAssignment[]
+  
+  @@unique([tenantId, name])
+}
+
+model ScheduleAssignment {
+  id           String    @id @default(cuid())
+  employeeId   String
+  employee     Employee  @relation(fields: [employeeId], references: [id])
+  scheduleId   String
+  schedule     Schedule  @relation(fields: [scheduleId], references: [id])
+  startDate    DateTime
+  endDate      DateTime?
+  rotationDay  Int?      // For rotating schedules
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  @@unique([employeeId, startDate])
+}
+
+// ============================================
+// ATTENDANCE RULES
+// ============================================
+
+model AttendanceRule {
+  id                    String   @id @default(cuid())
+  tenantId              String
+  tenant                Tenant   @relation(fields: [tenantId], references: [id])
+  name                  String
+  lateThresholdMinutes  Int      @default(15)
+  earlyLeaveThresholdMinutes Int @default(15)
+  halfDayThresholdHours Float    @default(4)
+  overtimeThresholdHours Float   @default(8)
+  overtimeMultiplier    Float    @default(1.5)
+  weekendOvertimeMultiplier Float @default(2.0)
+  holidayOvertimeMultiplier Float @default(2.5)
+  latePenaltyType       String   @default("fixed") // fixed, percentage, progressive
+  latePenaltyAmount     Float    @default(0)
+  absencePenaltyAmount  Float    @default(0)
+  selfieRequired        Boolean  @default(false)
+  geofenceRequired      Boolean  @default(true)
+  offlineEnabled        Boolean  @default(true)
+  maxOfflineHours       Int      @default(24)
+  autoCheckoutEnabled   Boolean  @default(false)
+  autoCheckoutTime      String?  @default("23:59")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@unique([tenantId, name])
+}
+
+// ============================================
+// ATTENDANCE RECORDS
+// ============================================
+
+model Attendance {
+  id                String   @id @default(cuid())
+  tenantId          String
+  employeeId        String
+  employee          Employee @relation(fields: [employeeId], references: [id])
+  branchId          String
+  date              DateTime
+  checkInTime       DateTime?
+  checkOutTime      DateTime?
+  checkInLatitude   Float?
+  checkInLongitude  Float?
+  checkInAccuracy   Float?
+  checkOutLatitude  Float?
+  checkOutLongitude Float?
+  checkOutAccuracy  Float?
+  checkInPhoto      String?
+  checkOutPhoto     String?
+  checkInDeviceId   String?
+  checkOutDeviceId  String?
+  checkInIpAddress  String?
+  checkOutIpAddress String?
+  checkInMethod     String   @default("online") // online, offline
+  checkOutMethod    String   @default("online")
+  isLate            Boolean  @default(false)
+  lateMinutes       Int      @default(0)
+  isEarlyLeave      Boolean  @default(false)
+  earlyLeaveMinutes Int      @default(0)
+  isAbsent          Boolean  @default(false)
+  isHalfDay         Boolean  @default(false)
+  totalHours        Float    @default(0)
+  overtimeHours     Float    @default(0)
+  breakMinutes      Int      @default(0)
+  status            String   @default("present") // present, absent, late, early_leave, half_day, holiday, leave
+  notes             String?
+  faceMatchScore    Float?
+  faceMismatchFlag  Boolean  @default(false)
+  spoofingFlag      Boolean  @default(false)
+  adminReviewStatus String?  // pending, approved, rejected
+  adminReviewedBy   String?
+  adminReviewedAt   DateTime?
+  syncStatus        String   @default("synced") // synced, pending, conflict
+  syncId            String?  // For offline sync
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  breaks            AttendanceBreak[]
+  
+  @@unique([employeeId, date])
+}
+
+model AttendanceBreak {
+  id           String     @id @default(cuid())
+  attendanceId String
+  attendance   Attendance @relation(fields: [attendanceId], references: [id])
+  breakStart   DateTime
+  breakEnd     DateTime?
+  breakType    String     @default("break") // break, lunch, personal
+  duration     Int        @default(0) // minutes
+  notes        String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// ============================================
+// PAYROLL
+// ============================================
+
+model PayrollRule {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  tenant              Tenant   @relation(fields: [tenantId], references: [id])
+  name                String
+  calculationMethod   String   @default("monthly") // monthly, hourly, daily
+  overtimeRate        Float    @default(1.5)
+  weekendOvertimeRate Float    @default(2.0)
+  holidayOvertimeRate Float    @default(2.5)
+  lateDeductionType   String   @default("fixed") // fixed, percentage, progressive
+  lateDeductionAmount Float    @default(0)
+  absenceDeductionType String  @default("daily") // daily, percentage
+  absenceDeductionAmount Float @default(0)
+  taxEnabled          Boolean  @default(false)
+  taxRate             Float    @default(0)
+  socialSecurityEnabled Boolean @default(false)
+  socialSecurityRate  Float    @default(0)
+  otherDeductions     String?  // JSON
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@unique([tenantId, name])
+}
+
+model SalaryProfile {
+  id                String   @id @default(cuid())
+  employeeId        String
+  employee          Employee @relation(fields: [employeeId], references: [id])
+  baseSalary        Float
+  allowances        String?  // JSON
+  deductions        String?  // JSON
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model PayrollPeriod {
+  id           String   @id @default(cuid())
+  tenantId     String
+  name         String
+  startDate    DateTime
+  endDate      DateTime
+  payDate      DateTime
+  status       String   @default("draft") // draft, processing, approved, paid
+  totalAmount  Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  records      PayrollRecord[]
+  
+  @@unique([tenantId, startDate, endDate])
+}
+
+model PayrollRecord {
+  id              String        @id @default(cuid())
+  payrollPeriodId String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
+  employeeId      String
+  workingDays     Int           @default(0)
+  presentDays     Int           @default(0)
+  absentDays      Int           @default(0)
+  lateDays        Int           @default(0)
+  totalHours      Float         @default(0)
+  overtimeHours   Float         @default(0)
+  baseSalary      Float         @default(0)
+  overtimePay     Float         @default(0)
+  allowances      Float         @default(0)
+  lateDeductions  Float         @default(0)
+  absenceDeductions Float       @default(0)
+  otherDeductions Float         @default(0)
+  grossPay        Float         @default(0)
+  netPay          Float         @default(0)
+  status          String        @default("pending") // pending, approved, paid
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String
+  module      String
+  resourceId  String?
+  oldValues   String?  // JSON
+  newValues   String?  // JSON
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  userId      String?
+  type        String   // late_alert, absence_alert, payroll_ready, etc.
+  title       String
+  message     String
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+}
+
+// ============================================
+// TIME-OFF & LEAVE MANAGEMENT
+// ============================================
+
+model LeaveType {
+  id              String   @id @default(cuid())
+  tenantId        String
+  name            String   // Annual, Sick, Maternity, etc.
+  code            String   // annual, sick, maternity, etc.
+  description     String?
+  daysAllowed     Int      @default(0) // Days per year
+  isPaid          Boolean  @default(true)
+  isCarryOver     Boolean  @default(false) // Can carry over to next year
+  maxCarryOver    Int      @default(0)
+  requiresApproval Boolean @default(true)
+  requiresDocument Boolean @default(false)
+  color           String   @default("#10b981") // For UI display
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  requests        TimeOffRequest[]
+  balances        LeaveBalance[]
+  
+  @@unique([tenantId, code])
+}
+
+model LeaveBalance {
+  id              String   @id @default(cuid())
+  tenantId        String
+  employeeId      String
+  leaveTypeId     String
+  leaveType       LeaveType @relation(fields: [leaveTypeId], references: [id])
+  year            Int
+  totalDays       Float    @default(0)
+  usedDays        Float    @default(0)
+  pendingDays     Float    @default(0)
+  carriedOver     Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([employeeId, leaveTypeId, year])
+}
+
+model TimeOffRequest {
+  id              String   @id @default(cuid())
+  tenantId        String
+  employeeId      String
+  leaveTypeId     String
+  leaveType       LeaveType @relation(fields: [leaveTypeId], references: [id])
+  startDate       DateTime
+  endDate         DateTime
+  totalDays       Float
+  reason          String?
+  documentUrl     String?
+  status          String   @default("pending") // pending, approved, rejected, cancelled
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewNotes     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model TimeOffPolicy {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  name                String
+  description         String?
+  accrualMethod       String   @default("monthly") // monthly, yearly, per_pay_period
+  accrualRate         Float    @default(1.25) // Days per period
+  waitingPeriod       Int      @default(90) // Days before eligible
+  maxAccrual          Int      @default(30)
+  isDefault           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@unique([tenantId, name])
+}
