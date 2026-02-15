@@ -36,6 +36,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Expose port
 EXPOSE 3000
@@ -43,5 +45,11 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# Create startup script
+RUN echo '#!/bin/sh' > start.sh && \
+    echo 'bunx prisma db push --accept-data-loss' >> start.sh && \
+    echo 'node server.js' >> start.sh && \
+    chmod +x start.sh
+
 # Start the application
-CMD ["node", "server.js"]
+CMD ["./start.sh"]
