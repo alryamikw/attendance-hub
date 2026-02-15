@@ -2,9 +2,12 @@
 # Dockerfile for Railway/Production Deployment
 # ===========================================
 
-# Base image
-FROM oven/bun:1 AS base
+# Base image with Node.js
+FROM node:20-alpine AS base
 WORKDIR /app
+
+# Install bun
+RUN npm install -g bun
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -25,7 +28,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
 
 # Production image
-FROM base AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -43,13 +46,6 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 EXPOSE 3000
 
 ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-# Create startup script
-RUN echo '#!/bin/sh' > start.sh && \
-    echo 'bunx prisma db push --accept-data-loss' >> start.sh && \
-    echo 'node server.js' >> start.sh && \
-    chmod +x start.sh
 
 # Start the application
-CMD ["./start.sh"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node server.js"]
