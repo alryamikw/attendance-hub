@@ -4,7 +4,7 @@
 // Uses Resend for email delivery (free tier: 3000 emails/month)
 // Install: bun add resend
 
-import { Resend } from 'resend';
+// import { Resend } from 'resend';
 
 // Initialize Resend client (will use API key from environment)
 const resend = process.env.RESEND_API_KEY 

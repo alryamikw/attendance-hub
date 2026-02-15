@@ -325,4 +325,3 @@ export function useFaceRecognition() {
   return { loading, error, detectFace, generateEmbedding, verifyFace };
 }
 
-import { useState } from 'react';
