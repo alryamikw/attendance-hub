@@ -1,5 +1,5 @@
 # ===========================================
-# Dockerfile for Railway/Production Deployment
+# Dockerfile for Railway - Version 2
 # ===========================================
 
 FROM oven/bun:1 AS base
@@ -19,6 +19,10 @@ RUN bun run build
 
 FROM base AS runner
 WORKDIR /app
+
+# Set environment variables
+ENV DATABASE_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway
+ENV DIRECT_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -32,4 +36,4 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 EXPOSE 3000
 ENV PORT=3000
 
-CMD ["sh", "-c", "export DATABASE_URL='postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway' && export DIRECT_URL='postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway' && bunx prisma db push --accept-data-loss && node server.js"]
+CMD ["sh", "-c", "bunx prisma db push --accept-data-loss && node server.js"]
