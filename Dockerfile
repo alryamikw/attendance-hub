@@ -32,4 +32,4 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 EXPOSE 3000
 ENV PORT=3000
 
-CMD ["sh", "-c", "bunx prisma db push --accept-data-loss && node server.js"]
+CMD ["sh", "-c", "export DATABASE_URL='postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway' && export DIRECT_URL='postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway' && bunx prisma db push --accept-data-loss && node server.js"]
