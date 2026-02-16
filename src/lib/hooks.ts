@@ -1,3 +1,4 @@
+'use client';
 /**
  * React Hooks for Offline/Online Support
  */
@@ -26,7 +27,7 @@ import {
   SyncStatus,
   isDuplicateAction,
 } from './sync-engine';
-'use client';
+
 // Check if running in browser
 const isBrowser = typeof window !== 'undefined';
 
