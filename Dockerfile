@@ -1,8 +1,9 @@
 # ===========================================
-# Dockerfile for Railway - Node.js Version
+# Dockerfile for Railway - Version 5 (cache bust)
 # ===========================================
 
 FROM node:20-alpine AS base
+# Build v5
 WORKDIR /app
 
 FROM base AS deps
