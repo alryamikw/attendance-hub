@@ -1,5 +1,5 @@
 # ===========================================
-# Dockerfile for Railway - Version 6
+# Dockerfile for Railway - Version 7
 # ===========================================
 
 FROM node:20-alpine AS base
@@ -11,7 +11,6 @@ COPY prisma ./prisma/
 RUN npm ci || npm install
 
 FROM base AS builder
-# Set database URL BEFORE generating Prisma Client
 ENV DATABASE_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@nozomi.proxy.rlwy.net:19955/railway
 ENV DIRECT_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@nozomi.proxy.rlwy.net:19955/railway
 
@@ -30,12 +29,13 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 
+# Copy node_modules with prisma
+COPY --from=builder /app/node_modules ./node_modules
+
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 EXPOSE 8080
 
