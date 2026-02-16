@@ -26,6 +26,9 @@ import {
   SyncStatus,
   isDuplicateAction,
 } from './sync-engine';
+'use client';
+// Check if running in browser
+const isBrowser = typeof window !== 'undefined';
 
 // ==========================================
 // USE ONLINE STATUS HOOK
