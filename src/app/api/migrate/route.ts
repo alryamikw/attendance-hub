@@ -6,7 +6,8 @@ const execAsync = promisify(exec);
 
 export async function GET() {
   try {
-    const { stdout, stderr } = await execAsync('npx prisma db push --accept-data-loss', {
+    // Use the installed version of prisma, not npx which downloads latest
+    const { stdout, stderr } = await execAsync('node ./node_modules/prisma/build/index.js db push --accept-data-loss', {
       timeout: 60000,
     });
 
