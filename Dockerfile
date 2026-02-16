@@ -1,9 +1,8 @@
 # ===========================================
-# Dockerfile for Railway - Version 5 (cache bust)
+# Dockerfile for Railway - Version 6
 # ===========================================
 
 FROM node:20-alpine AS base
-# Build v5
 WORKDIR /app
 
 FROM base AS deps
@@ -12,6 +11,10 @@ COPY prisma ./prisma/
 RUN npm ci || npm install
 
 FROM base AS builder
+# Set database URL BEFORE generating Prisma Client
+ENV DATABASE_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@nozomi.proxy.rlwy.net:19955/railway
+ENV DIRECT_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@nozomi.proxy.rlwy.net:19955/railway
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
