@@ -1,8 +1,8 @@
 # ===========================================
-# Dockerfile for Railway - Version 3 (cache bust)
+# Dockerfile for Railway - Version 4
 # ===========================================
 
-FROM oven/bun:1 AS base
+FROM oven/bun:1.1.38 AS base
 WORKDIR /app
 
 FROM base AS deps
@@ -20,11 +20,12 @@ RUN bun run build
 FROM base AS runner
 WORKDIR /app
 
-# Set environment variables
+# Set environment variables BEFORE copying files
 ENV DATABASE_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway
 ENV DIRECT_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=8080
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
@@ -33,7 +34,6 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-EXPOSE 3000
-ENV PORT=3000
+EXPOSE 8080
 
 CMD ["sh", "-c", "bunx prisma db push --accept-data-loss && node server.js"]
