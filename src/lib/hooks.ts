@@ -29,16 +29,18 @@ import {
 } from './sync-engine';
 
 // Check if running in browser
-const isBrowser = typeof window !== 'undefined';
+const isBrowser = typeof window !== 'undefined' && typeof navigator !== 'undefined';
 
 // ==========================================
 // USE ONLINE STATUS HOOK
 // ==========================================
 
 export function useOnlineStatus(): boolean {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(isBrowser ? navigator.onLine : true);
   
   useEffect(() => {
+    if (!isBrowser) return;
+    
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     
@@ -77,7 +79,7 @@ export function useGeolocation(options: PositionOptions = {}): {
   const [error, setError] = useState<string | null>(null);
   
   const requestLocation = useCallback(() => {
-    if (!navigator.geolocation) {
+    if (!isBrowser || !navigator.geolocation) {
       setError('Geolocation is not supported by this browser');
       return;
     }
@@ -111,7 +113,7 @@ export function useGeolocation(options: PositionOptions = {}): {
   
   // Watch position for continuous updates
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!isBrowser || !navigator.geolocation) return;
     
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -135,7 +137,9 @@ export function useGeolocation(options: PositionOptions = {}): {
     );
     
     return () => {
-      navigator.geolocation.clearWatch(watchId);
+      if (isBrowser && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+      }
     };
   }, [options]);
   
@@ -161,7 +165,7 @@ function getLocationErrorMessage(error: GeolocationPositionError): string {
 
 export function useSyncStatus(): SyncStatus {
   const [status, setStatus] = useState<SyncStatus>({
-    isOnline: navigator.onLine,
+    isOnline: isBrowser ? navigator.onLine : true,
     pendingCount: 0,
     lastSyncAt: null,
     isSyncing: false,
@@ -374,6 +378,11 @@ export function useCamera(): UseCameraResult {
   const streamRef = useRef<MediaStream | null>(null);
   
   const startCamera = useCallback(async () => {
+    if (!isBrowser || !navigator.mediaDevices) {
+      setError('Camera is not supported in this environment');
+      return;
+    }
+    
     try {
       setError(null);
       
@@ -453,7 +462,7 @@ export function usePWAInstall(): {
 } {
   // Initialize with the correct value to avoid setState in effect
   const [isInstalled, setIsInstalled] = useState(() => {
-    if (typeof window !== 'undefined') {
+    if (isBrowser) {
       return window.matchMedia('(display-mode: standalone)').matches;
     }
     return false;
@@ -462,6 +471,8 @@ export function usePWAInstall(): {
   const installPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
   
   useEffect(() => {
+    if (!isBrowser) return;
+    
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       installPromptRef.current = e as BeforeInstallPromptEvent;
