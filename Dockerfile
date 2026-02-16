@@ -1,26 +1,25 @@
 # ===========================================
-# Dockerfile for Railway - Version 4
+# Dockerfile for Railway - Node.js Version
 # ===========================================
 
-FROM oven/bun:1.1.38 AS base
+FROM node:20-alpine AS base
 WORKDIR /app
 
 FROM base AS deps
-COPY package.json bun.lock ./
+COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
-RUN bun install --frozen-lockfile
+RUN npm ci || npm install
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN bunx prisma generate
+RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN bun run build
+RUN npm run build
 
 FROM base AS runner
 WORKDIR /app
 
-# Set environment variables BEFORE copying files
 ENV DATABASE_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway
 ENV DIRECT_URL=postgresql://postgres:siRYAWGEhdXEgAzUqKGUuukBMxEacZSh@postgres.railway.internal:5432/railway
 ENV NODE_ENV=production
@@ -36,4 +35,4 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "bunx prisma db push --accept-data-loss && node server.js"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node server.js"]
